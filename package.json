@@ -1,0 +1,23 @@
+{
+  "name": "mcmv-calculadora",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "mercadopago": "^3.6.1",
+    "next": "16.3.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "eslint": "^9.15.0",
+    "eslint-config-next": "16.3.5"
+  }
+}
