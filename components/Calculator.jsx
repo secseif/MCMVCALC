@@ -126,6 +126,13 @@ export default function Calculator({ session, onLimitReached, onLoginRequired })
       if (!res.ok) {
         throw new Error(data.error || "Não foi possível calcular.");
       }
+      if (!data.sac || !data.price) {
+        throw new Error(
+          "A resposta do servidor veio incompleta (faltou SAC ou Price). Se você acabou de " +
+            "atualizar o site, tente limpar o cache do navegador ou fazer um novo deploy — " +
+            "provavelmente uma versão antiga do backend ainda está no ar."
+        );
+      }
 
       setResult(data);
       setRemainingFree(data.remainingFree);
@@ -162,7 +169,7 @@ export default function Calculator({ session, onLimitReached, onLoginRequired })
   }
 
   async function handleSalvarSimulacao() {
-    if (!result || !session?.access_token) return;
+    if (!result || !active || !session?.access_token) return;
     setSavingSim(true);
     setSavedMsg("");
     try {
@@ -210,7 +217,7 @@ export default function Calculator({ session, onLimitReached, onLoginRequired })
   }
 
   function handleBaixarPDF() {
-    if (!result) return;
+    if (!result || !active) return;
     downloadSimulationPDF({
       imovelNum: parseBRLInput(imovel),
       entradaNum: parseBRLInput(entrada),
@@ -473,7 +480,7 @@ export default function Calculator({ session, onLimitReached, onLoginRequired })
         )}
       </div>
 
-      {result && (
+      {result && active && result.sac && result.price && (
         <>
           {/* TAXA MENSAL + JUROS x ENCARGOS */}
           <div className="card">
