@@ -88,7 +88,10 @@ export default function Calculator({ session, onLimitReached, onLoginRequired })
       system,
       extraType,
       extraValue: val,
-      strategy,
+      // "Reduzir parcela" só é aplicável a um aporte único (ver comentário
+      // em lib/amortization.js); para aportes recorrentes o efeito é
+      // sempre reduzir o prazo.
+      strategy: extraType === "unico" ? strategy : "prazo",
     });
     setExtraResult(sim);
   }
@@ -274,10 +277,21 @@ export default function Calculator({ session, onLimitReached, onLoginRequired })
                   <button type="button" className={strategy === "prazo" ? "active" : ""} onClick={() => setStrategy("prazo")}>
                     Reduzir prazo
                   </button>
-                  <button type="button" className={strategy === "parcela" ? "active" : ""} onClick={() => setStrategy("parcela")}>
+                  <button
+                    type="button"
+                    className={strategy === "parcela" ? "active" : ""}
+                    onClick={() => setStrategy("parcela")}
+                    disabled={extraType !== "unico"}
+                    title={extraType !== "unico" ? "Só disponível para um aporte único" : undefined}
+                  >
                     Reduzir parcela
                   </button>
                 </div>
+                {extraType !== "unico" && (
+                  <p className="note" style={{ marginTop: 6 }}>
+                    Com aporte recorrente, o abatimento sempre reduz o prazo — "reduzir parcela" só se aplica a um aporte único.
+                  </p>
+                )}
               </div>
             </div>
 
