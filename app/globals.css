@@ -321,6 +321,11 @@ tbody tr.extra-row td { color: var(--accent-strong); font-weight: 600; }
   border-color: var(--warn);
   font-weight: 600;
 }
+.extra-toggle button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.extra-toggle button:disabled:hover { border-color: var(--line); }
 
 .compare-grid {
   display: grid;
