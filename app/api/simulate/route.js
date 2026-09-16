@@ -20,6 +20,10 @@ export async function POST(request) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
 
+  // system aqui só decide qual dos dois vem marcado como "ativo" na
+  // resposta — calculamos SAC e Price juntos, para a comparação entre os
+  // dois sistemas não custar uma segunda simulação grátis.
+
   const db = supabaseAdmin();
 
   // 1) Usuário autenticado? Se sim, sem limite de simulações.
@@ -69,28 +73,30 @@ export async function POST(request) {
         { onConflict: "id" }
       );
 
-    const result = calc(imovel, entrada, cetAnualPct, n, system);
+    const result = calc(imovel, entrada, cetAnualPct, n);
     return withAnonCookie(
-      NextResponse.json({ ...result, remainingFree: FREE_LIMIT - (freeCount + 1) }),
+      NextResponse.json({
+        ...result,
+        system,
+        remainingFree: FREE_LIMIT - (freeCount + 1),
+      }),
       anonId,
       isNew
     );
   }
 
   // Usuário logado: calcula sem restrição.
-  const result = calc(imovel, entrada, cetAnualPct, n, system);
-  return NextResponse.json({ ...result, remainingFree: null });
+  const result = calc(imovel, entrada, cetAnualPct, n);
+  return NextResponse.json({ ...result, system, remainingFree: null });
 }
 
-function calc(imovel, entrada, cetAnualPct, n, system) {
+function calc(imovel, entrada, cetAnualPct, n) {
   const pv = Number(imovel) - Number(entrada);
-  const table = buildAmortizationTable(
-    pv,
-    Number(cetAnualPct) / 100,
-    Number(n),
-    system
-  );
-  return { pv, ...table };
+  const cetAnual = Number(cetAnualPct) / 100;
+  const nNum = Number(n);
+  const sac = buildAmortizationTable(pv, cetAnual, nNum, "SAC");
+  const price = buildAmortizationTable(pv, cetAnual, nNum, "Price");
+  return { pv, sac, price };
 }
 
 function withAnonCookie(response, anonId, isNew) {
