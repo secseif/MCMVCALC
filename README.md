@@ -76,6 +76,11 @@ projetos pequenos):
    quando estiver pronto para cobrar de verdade).
 4. Depois do primeiro deploy, atualize `NEXT_PUBLIC_SITE_URL` para a URL
    final e a URL do webhook cadastrada no Mercado Pago.
+5. Não esqueça de rodar a versão atualizada de `sql/schema.sql` no SQL
+   Editor do Supabase — ela agora inclui a tabela `simulations` (histórico
+   de simulações salvas) além de `anon_usage` e `payments`. Rodar o script
+   de novo não duplica as tabelas já existentes (usa `create table if not
+   exists`).
 
 ## Como funciona o limite gratuito
 
@@ -108,6 +113,72 @@ SMS antes da 4ª simulação).
 5. A página, ao voltar do Checkout, chama `/api/payment/status` para
    confirmar que o webhook já processou, e então pede login/cadastro.
 
+## Ferramentas de educação financeira
+
+Além da calculadora principal (SAC x Price a partir do CET), o site tem:
+
+- **Quanto imóvel você consegue financiar** — a partir da renda informada,
+  calcula o valor máximo de imóvel mantendo a parcela dentro de 30% da
+  renda (o mesmo teto que a Caixa usa no SFH e no MCMV). Roda 100% no
+  navegador, não gasta simulação grátis.
+- **Renda composta** — soma até 3 rendas (comum quando o financiamento é
+  feito em nome de mais de uma pessoa da família).
+- **Capital inicial necessário** — soma a entrada ao ITBI estimado (2% a
+  3% do imóvel, varia por cidade) e a custos de escritura/registro, e
+  desconta o FGTS disponível, se informado.
+- **Quanto guardar por mês** — dado uma meta de entrada, um prazo e um
+  rendimento mensal estimado, calcula o depósito mensal necessário
+  (fórmula de valor futuro de uma série de aportes).
+- **Comparação SAC x Tabela Price automática** — a rota `/api/simulate`
+  já calcula os dois sistemas numa única chamada, então comparar não custa
+  uma segunda simulação grátis.
+- **Separação aproximada entre juro puro e encargos do CET** — se a
+  pessoa informar também a taxa de juros nominal contratada (separada do
+  CET), o site estima quanto do custo total é juro e quanto é
+  seguro/tarifa. É uma aproximação (comparação entre a taxa nominal e a
+  do CET) — só o banco tem a composição exata.
+- **Amortização extra com atalho para o FGTS** — além de mensal/anual/
+  único, dá pra simular um aporte "a cada X meses"; o botão de atalho já
+  configura 24 meses, que é a regra atual de uso do FGTS para abater
+  saldo devedor.
+- **Alugar ou financiar** — comparação simplificada (não considera
+  valorização do imóvel, reajuste de aluguel, IPTU/condomínio) só para dar
+  um ponto de partida.
+- **Comprometimento de renda total** — além do teto oficial de 30% da
+  Caixa (que olha só a parcela), soma outras dívidas mensais informadas
+  para um alerta de orçamento pessoal (deixamos claro na tela que isso não
+  é o critério oficial do banco).
+- **Faixa do Minha Casa Minha Vida** — identifica a faixa (1 a 4) a partir
+  da renda informada.
+- **Histórico de simulações** — usuários logados podem salvar simulações
+  (tabela `simulations` no Supabase) e apagar depois.
+- **PDF da simulação** — gerado no navegador (biblioteca `jspdf`), sem
+  precisar de servidor de PDF.
+- **Tooltips de glossário** — um "?" ao lado de termos como CET, SAC,
+  Price, ITBI, FGTS etc., com a definição em `lib/glossary.js`.
+
+### Sobre os números usados nessas contas (e por que confirmar antes de decidir)
+
+Alguns desses cálculos citam valores oficiais que **mudam com o tempo** —
+tratamos isso como estimativa educativa, nunca como fonte definitiva:
+
+- **Faixas de renda do MCMV** (`lib/finance.js`, `MCMV_FAIXAS`): valores
+  vigentes conforme reportagens de 2026 (Faixa 1 até R$ 3.200; Faixa 2 até
+  R$ 5.000; Faixa 3 até R$ 9.600; Faixa 4 até R$ 13.000). O programa revisa
+  esses valores periodicamente — confirme em
+  [gov.br/cidades](https://www.gov.br/cidades) ou direto com a Caixa antes
+  de usar isso para decidir algo.
+- **Regra do FGTS a cada 24 meses**: confirmada em fontes de 2026 (é
+  possível abater o saldo devedor a cada 2 anos, ou reduzir até 80% de até
+  12 parcelas seguidas, exigindo pelo menos 3 anos de trabalho sob o
+  regime do FGTS).
+- **ITBI entre 2% e 3%**: é a faixa típica cobrada pelas prefeituras
+  brasileiras, mas cada município define seu próprio percentual — o
+  correto é sempre confirmar na prefeitura da cidade do imóvel.
+- **Teto de 30% de comprometimento de renda**: confirmado em múltiplas
+  fontes como o critério usado pela Caixa no SFH e no Minha Casa Minha
+  Vida, sem variar por faixa.
+
 ## Estrutura do projeto
 
 ```
@@ -116,22 +187,29 @@ app/
   page.js                página principal: monta calculadora + anúncios + modais
   globals.css            estilos
   api/
-    simulate/route.js         calcula parcelas e aplica o limite grátis
-    payment/create/route.js   cria a cobrança de R$ 1 no Mercado Pago
-    payment/webhook/route.js  confirma pagamentos aprovados
-    payment/status/route.js   consulta se o visitante já pagou
+    simulate/route.js           calcula SAC e Price juntos e aplica o limite grátis
+    simulations/route.js        salvar (POST) e listar (GET) simulações do usuário logado
+    simulations/[id]/route.js   apagar uma simulação salva (DELETE)
+    payment/create/route.js     cria a cobrança de R$ 1 no Mercado Pago
+    payment/webhook/route.js    confirma pagamentos aprovados
+    payment/status/route.js     consulta se o visitante já pagou
 components/
-  Calculator.jsx         formulário + resultado + tabela de amortização
+  Calculator.jsx         formulário + todas as ferramentas + resultado + tabela
   AdSlot.jsx              espaço de anúncio (placeholder ou AdSense real)
   PaywallModal.jsx        tela "pague R$1 para continuar"
   AuthModal.jsx           tela de login / criar conta
+  InfoTip.jsx             tooltip de glossário ("?")
 lib/
-  amortization.js         fórmulas de SAC e Tabela Price (mesma lógica da versão artifact)
+  amortization.js         fórmulas de SAC e Tabela Price + amortização extra
+  finance.js              quanto posso financiar, meta de poupança, alugar x financiar, faixa MCMV, juro x encargos
+  glossary.js             textos dos tooltips
+  pdf.js                  geração do PDF da simulação (jsPDF, roda no navegador)
   supabaseClient.js        cliente Supabase do navegador
   supabaseAdmin.js         cliente Supabase de servidor (service role)
+  authUser.js              valida o usuário logado a partir do token enviado pelo navegador
   mercadopago.js           cliente do SDK do Mercado Pago
   anonId.js                cookie do visitante anônimo
-sql/schema.sql            tabelas do Supabase
+sql/schema.sql            tabelas do Supabase (anon_usage, payments, simulations)
 ```
 
 ## Próximos passos sugeridos
@@ -142,3 +220,7 @@ sql/schema.sql            tabelas do Supabase
 - Ligar a confirmação por e-mail do Supabase antes de ir para produção.
 - Trocar as credenciais de teste do Mercado Pago pelas de produção só
   quando estiver pronto para cobrar de verdade.
+- Revisar periodicamente os valores citados acima (faixas do MCMV, regra
+  do FGTS, ITBI) — são números que mudam por decisão do governo ou de
+  cada prefeitura, não algo que este código possa manter atualizado
+  sozinho.
